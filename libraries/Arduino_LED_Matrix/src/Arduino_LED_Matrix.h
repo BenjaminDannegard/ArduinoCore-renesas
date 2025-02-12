@@ -148,6 +148,11 @@ static uint32_t reverse(uint32_t x)
 
 static uint8_t __attribute__((aligned)) framebuffer[NUM_LEDS / 8];
 
+/**
+ * @brief Class representing an LED matrix for Arduino.
+ *
+ * This class provides methods to control and manage the LED matrix.
+ */
 class ArduinoLEDMatrix
 #ifdef MATRIX_WITH_ARDUINOGRAPHICS
     : public ArduinoGraphics
@@ -155,6 +160,11 @@ class ArduinoLEDMatrix
      {
 
 public:
+    /**
+     * @brief Constructor for the ArduinoLEDMatrix class.
+     *
+     * Initializes the LED matrix and sets up any necessary configurations.
+     */
     ArduinoLEDMatrix()
     #ifdef MATRIX_WITH_ARDUINOGRAPHICS
         : ArduinoGraphics(canvasWidth, canvasHeight)
@@ -165,12 +175,33 @@ public:
     void autoscroll(uint32_t interval_ms) {
         _interval = interval_ms;
     }
+
+    /**
+     * @brief Turns on the LED at the specified pin.
+     *
+     * @param `pin` The pin number where the LED is connected.
+     */
     void on(size_t pin) {
         turnLed(pin, true);
     }
+
+    /**
+     * @brief Turns off the LED at the specified pin.
+     *
+     * @param `pin` The pin number where the LED is connected.
+     */
     void off(size_t pin) {
         turnLed(pin, false);
     }
+    
+    /**
+     * @brief Initializes the LED matrix and starts the timer.
+     *
+     * This function configures and starts a periodic timer for controlling the LED matrix.
+     * It searches for an available timer, configures it, and starts it with a default frequency.
+     *
+     * @return Returns `1` (true) if initialization succeeds, otherwise `0` (false).
+     */
     int begin() {
         bool rv = true;
         uint8_t type;
@@ -185,6 +216,18 @@ public:
         rv &= _ledTimer.start();
         return rv;
     }
+
+    /**
+     * @brief Advances to the next frame in the LED matrix animation sequence.
+     *
+     * This function updates the frame buffer by fetching the next frame data from 
+     * the stored sequence. If the animation reaches the last frame, it either loops 
+     * or stops based on the loop setting. If a callback function is set, it is 
+     * triggered when the sequence completes.
+     *
+     * @note This function also reverses frame data before updating the framebuffer.
+     *
+     */
     void next() {
         uint32_t frame[3];
         frame[0] = reverse(*(_frames+(_currentFrame*4)+0));
@@ -203,6 +246,17 @@ public:
         }
         memcpy(framebuffer, (uint32_t*)frame, sizeof(frame));
     }
+
+    /**
+     * @brief Loads a single frame into the LED matrix and updates the display.
+     *
+     * This function takes a frame buffer containing LED matrix data and loads it
+     * as a single-frame animation sequence. It then advances to display the frame
+     * immediately and ensures the animation interval is set to 0 to prevent looping.
+     *
+     * @param `buffer` An array of three 32-bit values representing the frame data.
+     *
+     */
     void loadFrame(const uint32_t buffer[3]){
         uint32_t tempBuffer[][4] = {{
             buffer[0], buffer[1], buffer[2], 0
@@ -211,16 +265,47 @@ public:
         next();
         _interval = 0;
     }
+
+    /**
+     * @brief Renders a specific frame from the loaded sequence.
+     *
+     * This function sets the current frame index to the specified frame number,
+     * ensuring it wraps around within the available frame count. It then updates
+     * the display to show the selected frame and stops any automatic transitions
+     * by setting the interval to 0.
+     *
+     * @param `frameNumber` The index of the frame to be displayed.
+     */
     void renderFrame(uint8_t frameNumber){
         _currentFrame = frameNumber % _framesCount;
         next();
         _interval = 0;
     }
+
+    /**
+     * @brief Starts playing the loaded frame sequence.
+     *
+     * This function begins playback of the current sequence, advancing through 
+     * frames automatically. If looping is enabled, the sequence will restart 
+     * after reaching the last frame.
+     *
+     * @param `loop` Set to `true` to enable looping; `false` to play the sequence once. Default is `false`.
+     */
     void play(bool loop = false){
         _loop = loop;
         _sequenceDone = false;
         next();
     }
+
+    /**
+     * @brief Checks if the sequence has finished playing.
+     *
+     * This function checks if the current frame sequence has completed. 
+     * If the sequence is done, it will reset the `_sequenceDone` flag 
+     * and return `true`, otherwise it returns `false`.
+     *
+     * @return `true` if the sequence is done, `false` otherwise.
+     */
     bool sequenceDone(){
         if(_sequenceDone){
             _sequenceDone = false;
@@ -229,6 +314,18 @@ public:
         return false;
     }
 
+    /**
+     * @brief Loads pixel data from an array into a buffer.
+     *
+     * This function takes a byte array (`arr`) containing pixel data and converts it 
+     * into a `uint32_t` buffer (`dst`). Each byte in the array represents 8 pixels, 
+     * and the data is packed into the 32-bit buffer accordingly. The function processes
+     * the pixel data byte by byte and stores the packed data into the buffer in chunks of 32 bits.
+     *
+     * @param `arr` The input byte array containing pixel data.
+     * @param `size` The number of elements in the array `arr` to process.
+     * @param `dst` The destination buffer where the packed pixel data will be stored.
+     */
     static void loadPixelsToBuffer(uint8_t* arr, size_t size, uint32_t* dst) {
         uint32_t partialBuffer = 0;
         uint8_t pixelIndex = 0;
@@ -244,11 +341,36 @@ public:
         }
     }
 
+    /**
+     * @brief Loads pixel data into the frame buffer and prepares it for rendering.
+     *
+     * This function takes a byte array (`arr`) containing pixel data, converts it 
+     * into a 32-bit buffer using `loadPixelsToBuffer`, and then loads the buffer 
+     * into the frame sequence using `loadFrame`. The function ensures that the pixel 
+     * data is properly formatted and ready for display by converting the data into 
+     * a suitable format and storing it in the internal frame buffer.
+     *
+     * @param `arr` The input byte array containing the pixel data to be loaded.
+     * @param `size` The number of elements in the array `arr` to process.
+     */
     void loadPixels(uint8_t *arr, size_t size){
         loadPixelsToBuffer(arr, size, _frameHolder);
         loadFrame(_frameHolder);
     };
 
+    /**
+     * @brief Loads a sequence of frames into the frame buffer.
+     *
+     * This function accepts a 2D array (`frames`) containing frame data and the 
+     * number of frames (`howMany`). It calculates the total number of frames 
+     * and sets the appropriate frame pointer for future frame rendering. The 
+     * function also resets the current frame index to 0, ensuring that frame 
+     * playback starts from the beginning.
+     *
+     * @param `frames` A 2D array containing the frame data to be loaded into the 
+     * frame buffer. Each frame is expected to contain 4 uint32_t values.
+     * @param `howMany` The total number of frame elements (in uint32_t) in the `frames` array.
+     */
     void loadWrapper(const uint32_t frames[][4], uint32_t howMany) {
         _currentFrame = 0;
         _frames = (uint32_t*)frames;
@@ -259,6 +381,10 @@ public:
         _callBack = callBack;
     }
 
+    /**
+     * @brief Clears the LED matrix display and resets the canvas buffer.
+     *
+     */
     void clear() {
         const uint32_t fullOff[] = {
             0x00000000,
@@ -273,6 +399,22 @@ public:
 
 
 #ifdef MATRIX_WITH_ARDUINOGRAPHICS
+    /**
+     * @brief Sets a pixel at the specified coordinates with a color.
+     * 
+     * This function updates the pixel at position `(x, y)` on the canvas. The pixel is 
+     * set to on (1) if any of the red (r), green (g), or blue (b) values are greater 
+     * than 0.
+     * 
+     * @param `x` The x-coordinate (horizontal position) of the pixel to set. 
+     * Should be between 0 and `canvasWidth - 1`.
+     * @param `y` The y-coordinate (vertical position) of the pixel to set. 
+     * Should be between 0 and `canvasHeight - 1`.
+     * @param `r` The red color value (used here for logical presence check).
+     * @param `g` The green color value (used here for logical presence check).
+     * @param `b` The blue color value (used here for logical presence check).
+     * 
+     */
     virtual void set(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
       if (y >= canvasHeight || x >= canvasWidth || y < 0 || x < 0) {
         return;
@@ -281,6 +423,17 @@ public:
       _canvasBuffer[y][x] = (r | g | b) > 0 ? 1 : 0;
     }
 
+    /**
+     * @brief Ends the text rendering and optionally scrolls.
+     * 
+     * This function finalizes the text rendering process and, if scrolling is 
+     * requested, applies the scroll.
+     * 
+     * @param `scrollDirection` The direction to scroll the text after rendering. 
+     * Possible values are:
+     *  - `NO_SCROLL` (default): No scrolling.
+     *  - A positive value indicates scrolling in a direction.
+     */
     void endText(int scrollDirection = NO_SCROLL) {
       ArduinoGraphics::endText(scrollDirection);
       renderBitmap(_canvasBuffer, canvasHeight, canvasWidth);
@@ -302,6 +455,22 @@ public:
       }
     }
 
+    /**
+     * @brief Ends the text rendering and captures it into an animation buffer.
+     * 
+     * @param `scrollDirection` The direction to scroll the text after rendering. 
+     * Typically, the value can specify no scroll or a scroll speed for animation purposes.
+     * 
+     * @param `frames` A 2D array that holds the captured frames, where each frame is 
+     * represented by a set of 4 32-bit values.
+     * 
+     * @param `howManyMax` The maximum number of frames that can be captured into the 
+     * `frames` buffer.
+     * 
+     * @param `howManyUsed` A reference that will hold the number of frames actually 
+     * used to capture the animation.
+     * 
+     */
     void endTextToAnimationBuffer(int scrollDirection, uint32_t frames[][4], uint32_t howManyMax, uint32_t& howManyUsed) {
       captureAnimationFrame = &frames[0][0];
       captureAnimationHowManyRemains = howManyMax;
@@ -315,6 +484,13 @@ public:
       howManyUsed = howManyMax - captureAnimationHowManyRemains;
     }
 
+    /**
+     * @brief Sets the scroll speed for the text rendering.
+     * 
+     * @param `speed` The speed at which the text should scroll, typically in milliseconds 
+     * or as defined by the graphics library. A higher value will make 
+     * the text scroll slower, and a lower value will make it scroll faster.
+     */
     void textScrollSpeed(unsigned long speed) {
       ArduinoGraphics::textScrollSpeed(speed);
       _textScrollSpeed = speed;
